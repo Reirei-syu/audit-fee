@@ -53,12 +53,59 @@
             border: 1px solid rgba(255, 255, 255, 0.8);
             border-radius: 18px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            position: relative;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .iso-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        .iso-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(120deg, #1ed6ff, #5b7dff, #1ed6ff);
+            background-size: 200% 200%;
+            opacity: 0;
+            pointer-events: none;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            transition: opacity 0.2s ease;
+        }
+
+        .iso-card:hover::before {
+            opacity: 1;
+            animation: isoBorderFlow 1.6s linear infinite;
+        }
+
+        .iso-hover-outline {
+            position: relative;
+        }
+
+        .iso-hover-outline::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(120deg, #1ed6ff, #5b7dff, #1ed6ff);
+            background-size: 200% 200%;
+            opacity: 0;
+            pointer-events: none;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            transition: opacity 0.2s ease;
+        }
+
+        .iso-hover-outline:hover::after {
+            opacity: 1;
+            animation: isoBorderFlow 1.6s linear infinite;
+        }
+
+        @keyframes isoBorderFlow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
         }
 
         .iso-input {
@@ -433,7 +480,7 @@
                     <button 
                         key={opt.value}
                         onClick={() => onChange(opt.value)}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${value === opt.value ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:bg-white/30'}`}
+                        className={`iso-hover-outline px-4 py-2 rounded-lg text-sm font-semibold transition-all ${value === opt.value ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:bg-white/30'}`}
                     >
                         {opt.label}
                     </button>
@@ -653,7 +700,7 @@
                                 value={calcMethod}
                                 onChange={setCalcMethod}
                             />
-                            <div className="flex items-center bg-white/50 rounded-lg px-3 py-2 border border-blue-100 shadow-sm">
+                            <div className="iso-hover-outline flex items-center bg-white/50 rounded-lg px-3 py-2 border border-blue-100 shadow-sm">
                                 <span className="text-sm text-gray-600 font-medium mr-2">批量折扣(%):</span>
                                 <input 
                                     type="number" 
