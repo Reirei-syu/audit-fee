@@ -5,18 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>审计费计算器 Pro - ISO 稳定版</title>
     
-    <!-- 1. 样式库：Tailwind CSS (UI框架) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 1. 样式库：Tailwind CSS (UI框架，锁定主要版本) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     
-    <!-- 2. 图标库：Lucide (图标资源) -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- 2. 图标库：Lucide (图标资源，锁定版本) -->
+    <script src="https://unpkg.com/lucide@0.577.0/dist/umd/lucide.min.js"></script>
 
     <!-- 3. 核心框架：React 18 UMD (通用模块定义，最稳定的浏览器直接运行方式) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- 4. 编译器：Babel Standalone (用于在浏览器中将 JSX 转换为 JS) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 4. 编译器：Babel Standalone (用于在浏览器中将 JSX 转换为 JS，锁定版本) -->
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
+    <!-- 5. 导出库：SheetJS (用于导出 Excel，锁定版本) -->
+    <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -39,8 +42,8 @@
             border-radius: 30px;
             border: 1px solid rgba(255, 255, 255, 0.4);
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
-            width: 100%;
-            max-width: 900px;
+            width: min(95vw, 1200px);
+            max-width: 1200px;
             overflow: hidden;
             transition: all 0.3s ease;
         }
@@ -123,6 +126,20 @@
             background: linear-gradient(to right, #007aff, #5856d6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+
+        /* Batch Header Adaptive Scaling */
+        .batch-controls {
+            transform-origin: right center;
+        }
+        @media (max-width: 1024px) {
+            .batch-controls { transform: scale(0.95); }
+        }
+        @media (max-width: 768px) {
+            .batch-controls { transform: scale(0.9); }
+        }
+        @media (max-width: 640px) {
+            .batch-controls { transform: scale(0.85); }
         }
         
         /* Loading / Error State */
@@ -224,9 +241,117 @@
             }
         ];
 
+        // --- Core Utilities ---
+        const STANDARDS_STORAGE_KEY = 'audit_standards_v2';
+        const STANDARDS_STORAGE_VERSION = 1;
+
+        const normalizeNumberString = (value) => {
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'number') return String(value);
+            return String(value).replace(/[,，\s]/g, '');
+        };
+
+        const parseNumber = (value) => {
+            const normalized = normalizeNumberString(value);
+            const num = parseFloat(normalized);
+            return Number.isFinite(num) ? num : NaN;
+        };
+
+        const sanitizeStandards = (raw) => {
+            if (!Array.isArray(raw)) return null;
+            const cleaned = [];
+            for (const item of raw) {
+                if (!item || typeof item !== 'object') continue;
+                const id = String(item.id || '').trim();
+                const name = String(item.name || '').trim();
+                const basis = String(item.basis || '').trim();
+                if (!id || !name || !basis) continue;
+                if (!Array.isArray(item.tiers) || item.tiers.length === 0) continue;
+
+                let tiers = [];
+                for (const tier of item.tiers) {
+                    if (!tier || typeof tier !== 'object') continue;
+                    const limitRaw = tier.limit;
+                    const limit = (limitRaw === Infinity) ? Infinity : parseNumber(limitRaw);
+                    if (limit !== Infinity && !Number.isFinite(limit)) continue;
+
+                    if (limit === Infinity) {
+                        const rate = parseNumber(tier.rate);
+                        if (!Number.isFinite(rate) || rate < 0) continue;
+                        let threshold = parseNumber(tier.threshold);
+                        if (!Number.isFinite(threshold) || threshold < 0) threshold = NaN;
+                        tiers.push({ limit: Infinity, rate, threshold });
+                    } else {
+                        if (limit < 0) continue;
+                        const fee = parseNumber(tier.fee);
+                        if (!Number.isFinite(fee) || fee < 0) continue;
+                        tiers.push({ limit, fee });
+                    }
+                }
+
+                if (tiers.length === 0) continue;
+                tiers.sort((a, b) => {
+                    const la = a.limit === Infinity ? Number.MAX_SAFE_INTEGER : a.limit;
+                    const lb = b.limit === Infinity ? Number.MAX_SAFE_INTEGER : b.limit;
+                    return la - lb;
+                });
+
+                const infinityIndex = tiers.findIndex(t => t.limit === Infinity);
+                if (infinityIndex === -1) continue;
+                if (infinityIndex !== tiers.length - 1) {
+                    const infTier = tiers[infinityIndex];
+                    tiers = tiers.filter(t => t.limit !== Infinity);
+                    tiers.push(infTier);
+                }
+
+                const lastFinite = tiers.length > 1 ? tiers[tiers.length - 2] : null;
+                const infTier = tiers[tiers.length - 1];
+                if (!Number.isFinite(infTier.threshold) || infTier.threshold < 0) {
+                    infTier.threshold = lastFinite ? lastFinite.limit : 0;
+                }
+
+                cleaned.push({ id, name, basis, tiers });
+            }
+            return cleaned.length ? cleaned : null;
+        };
+
+        const getTierBase = (standard, infinityIndex) => {
+            let total = 0;
+            for (let i = 0; i < infinityIndex; i++) {
+                const tier = standard.tiers[i];
+                if (tier && Number.isFinite(tier.fee)) {
+                    total += tier.fee;
+                }
+            }
+            return total;
+        };
+
+        const loadStandardsFromStorage = () => {
+            try {
+                const saved = localStorage.getItem(STANDARDS_STORAGE_KEY);
+                if (!saved) return null;
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    const sanitized = sanitizeStandards(parsed);
+                    if (!sanitized) localStorage.removeItem(STANDARDS_STORAGE_KEY);
+                    return sanitized;
+                }
+                if (parsed && typeof parsed === 'object') {
+                    if (parsed.version !== STANDARDS_STORAGE_VERSION) return null;
+                    const sanitized = sanitizeStandards(parsed.standards);
+                    if (!sanitized) localStorage.removeItem(STANDARDS_STORAGE_KEY);
+                    return sanitized;
+                }
+                localStorage.removeItem(STANDARDS_STORAGE_KEY);
+                return null;
+            } catch (e) {
+                return null;
+            }
+        };
+
         // --- Core Calculator ---
         const calculateFee = (assetValue, standard, unit = 'wan', method = 'excess') => {
-            let val = parseFloat(assetValue);
+            let val = parseNumber(assetValue);
             if (!val || isNaN(val) || val <= 0) return 0;
             
             // Convert to 'wan' for calculation if input is in 'yuan'
@@ -243,12 +368,11 @@
                 
                 // Handle Infinity Tier (Rate-based)
                 if (tier.limit === Infinity) {
-                    // Logic: Sum of all previous fees + (Excess * Rate)
-                    // Note: We ignore 'tier.base' from JSON and strictly use the accumulated total
-                    // to ensure consistency with the user's "Accumulate Standard Values" logic.
+                    // Logic: Base (sum of previous tiers) + (Excess * Rate)
                     // Rate is in ‰ (e.g. 0.2), so * 10 for Wan->Yuan conversion.
-                    const excess = val - tier.threshold; 
-                    return totalFee + (excess * tier.rate * 10);
+                    const excess = val - tier.threshold;
+                    const base = getTierBase(standard, i);
+                    return base + (excess * tier.rate * 10);
                 }
 
                 // Normal Tier Handling
@@ -318,7 +442,7 @@
         );
 
         // --- Batch Calculator Component ---
-        const BatchCalc = ({ standards, onBack, unit, calcMethod, setCalcMethod }) => {
+        const BatchCalc = ({ standards, unit, calcMethod, setCalcMethod }) => {
             // Rows: { id, name, amount, typeId, fee }
             const [rows, setRows] = useState(() => {
                 // Initial 10 empty rows
@@ -347,10 +471,99 @@
                 setRows(updatedRows);
             };
 
+            const handleExport = async () => {
+                if (!window.XLSX) {
+                    alert('导出模块加载失败，请检查网络连接后重试。');
+                    return;
+                }
+                const exportRows = rows.filter(r => Number.isFinite(r.fee) && r.fee > 0);
+                if (exportRows.length === 0) {
+                    alert('暂无可导出的有效数据（折后费用需大于0）。');
+                    return;
+                }
+
+                const methodLabel = calcMethod === 'full' ? '全额累进' : '超额累进';
+                const amountHeader = `资产/标的额 (${unit === 'wan' ? '万元' : '元'})`;
+                const headers = [
+                    '序号',
+                    '单位/项目名称',
+                    amountHeader,
+                    '业务类型',
+                    '折扣率(%)',
+                    '计费方式',
+                    '折后费用 (元)'
+                ];
+
+                const data = exportRows.map((row, idx) => {
+                    const std = standards.find(s => s.id === row.typeId);
+                    return {
+                        '序号': idx + 1,
+                        '单位/项目名称': row.name || '',
+                        [amountHeader]: row.amount || '',
+                        '业务类型': std ? std.name : '',
+                        '折扣率(%)': batchDiscount,
+                        '计费方式': methodLabel,
+                        '折后费用 (元)': Number(row.fee.toFixed(2))
+                    };
+                });
+
+                const sheet = window.XLSX.utils.json_to_sheet(data, { header: headers });
+
+                const colWidths = headers.map((key) => {
+                    let maxLen = String(key).length;
+                    for (const row of data) {
+                        const val = row[key];
+                        const len = String(val ?? '').length;
+                        if (len > maxLen) maxLen = len;
+                    }
+                    return { wch: Math.min(Math.max(maxLen + 2, 8), 40) };
+                });
+                sheet['!cols'] = colWidths;
+
+                const workbook = window.XLSX.utils.book_new();
+                window.XLSX.utils.book_append_sheet(workbook, sheet, '批量计算');
+
+                const now = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const filename = `audit-fee-batch-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}.xlsx`;
+
+                const fileData = window.XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+                if (window.showSaveFilePicker) {
+                    try {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: filename,
+                            types: [{
+                                description: 'Excel 文件',
+                                accept: {
+                                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+                                }
+                            }]
+                        });
+                        const writable = await handle.createWritable();
+                        await writable.write(fileData);
+                        await writable.close();
+                        return;
+                    } catch (err) {
+                        if (err && err.name === 'AbortError') return;
+                        console.warn('另存为失败，回退到自动下载：', err);
+                    }
+                }
+
+                window.XLSX.writeFile(workbook, filename);
+            };
+
             const updateRow = (index, field, value) => {
                 const newRows = [...rows];
+                let nextValue = value;
+                if (field === 'amount') {
+                    const normalized = normalizeNumberString(value);
+                    if (normalized !== '' && !/^\d*\.?\d*$/.test(normalized)) {
+                        return;
+                    }
+                    nextValue = normalized;
+                }
                 // Reset fee on edit to indicate need for recalculation
-                newRows[index] = { ...newRows[index], [field]: value, fee: null };
+                newRows[index] = { ...newRows[index], [field]: nextValue, fee: null };
                 setRows(newRows);
             };
             
@@ -396,13 +609,21 @@
                         newRows[currentRowIdx].name = cells[0] || '';
                         if (cells[1]) {
                             // If there is a second column, assume it's amount
-                            newRows[currentRowIdx].amount = cells[1].trim();
+                            const normalized = normalizeNumberString(cells[1].trim());
+                            if (normalized === '' || /^\d*\.?\d*$/.test(normalized)) {
+                                newRows[currentRowIdx].amount = normalized;
+                            }
                         }
                     } else if (colType === 'amount') {
                         // Pasting into Amount column
                         // Take the first valid number-like cell
                         const val = cells.find(c => /^\d/.test(c.trim()));
-                        if (val) newRows[currentRowIdx].amount = val.trim();
+                        if (val) {
+                            const normalized = normalizeNumberString(val.trim());
+                            if (normalized === '' || /^\d*\.?\d*$/.test(normalized)) {
+                                newRows[currentRowIdx].amount = normalized;
+                            }
+                        }
                     }
                     // Reset fee for pasted rows
                     newRows[currentRowIdx].fee = null;
@@ -422,14 +643,11 @@
 
             return (
                 <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                    <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <button onClick={onBack} className="text-gray-500 hover:text-blue-600 flex items-center gap-1 mb-2">
-                                <Icon name="arrow-left" size={16} /> 返回计算器
-                            </button>
-                            <h1 className="text-2xl font-bold tracking-tight">批量计算模式</h1>
+                    <header className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                        <div className="flex-shrink-0">
+                            <h1 className="text-2xl font-bold tracking-tight">批量计算</h1>
                         </div>
-                        <div className="flex items-center gap-4 flex-wrap justify-end">
+                        <div className="batch-controls flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end">
                             <ToggleGroup 
                                 options={[{label: '超额累进', value: 'excess'}, {label: '全额累进', value: 'full'}]}
                                 value={calcMethod}
@@ -442,7 +660,11 @@
                                     min="0" 
                                     max="100" 
                                     value={batchDiscount}
-                                    onChange={(e) => setBatchDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                                    onChange={(e) => {
+                                        const next = parseFloat(e.target.value);
+                                        const safe = Number.isFinite(next) ? next : 0;
+                                        setBatchDiscount(Math.min(100, Math.max(0, safe)));
+                                    }}
                                     className="w-16 bg-transparent text-right font-bold text-blue-600 outline-none border-b border-blue-200 focus:border-blue-500"
                                 />
                             </div>
@@ -451,6 +673,12 @@
                                 className="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30 flex items-center gap-2"
                             >
                                 <Icon name="calculator" size={16} /> 开始计算
+                            </button>
+                            <button 
+                                onClick={handleExport} 
+                                className="px-6 py-2 text-sm font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 flex items-center gap-2"
+                            >
+                                <Icon name="download" size={16} /> 导出 Excel
                             </button>
                              <button onClick={clearRows} className="px-4 py-2 text-sm text-red-500 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
                                 清空
@@ -550,12 +778,8 @@
             const [unit, setUnit] = useState('wan'); // 'wan', 'yuan'
             const [calcMethod, setCalcMethod] = useState('excess'); // 'excess', 'full'
             const [standards, setStandards] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('audit_standards_v2');
-                    return saved ? JSON.parse(saved) : DEFAULT_STANDARDS;
-                } catch(e) {
-                    return DEFAULT_STANDARDS;
-                }
+                const loaded = loadStandardsFromStorage();
+                return loaded || DEFAULT_STANDARDS;
             });
             
             const [asset, setAsset] = useState('');
@@ -564,8 +788,22 @@
             const [years, setYears] = useState(1);
 
             useEffect(() => {
-                localStorage.setItem('audit_standards_v2', JSON.stringify(standards));
+                try {
+                    const payload = {
+                        version: STANDARDS_STORAGE_VERSION,
+                        standards
+                    };
+                    localStorage.setItem(STANDARDS_STORAGE_KEY, JSON.stringify(payload));
+                } catch (e) {
+                    // Ignore write errors (quota/privacy mode)
+                }
             }, [standards]);
+
+            useEffect(() => {
+                if (!standards.find(s => s.id === selectedType)) {
+                    setSelectedType(standards[0]?.id || DEFAULT_STANDARDS[0].id);
+                }
+            }, [standards, selectedType]);
 
             useEffect(() => {
                 const loader = document.getElementById('loading-state');
@@ -588,8 +826,9 @@
             };
 
             const handleAssetChange = (v) => {
-                if (v === '' || /^\d*\.?\d*$/.test(v)) {
-                    setAsset(v);
+                const normalized = normalizeNumberString(v);
+                if (normalized === '' || /^\d*\.?\d*$/.test(normalized)) {
+                    setAsset(normalized);
                 }
             };
 
@@ -640,7 +879,6 @@
                         {view === 'batch' ? (
                             <BatchCalc 
                                 standards={standards} 
-                                onBack={() => setView('calc')} 
                                 unit={unit} 
                                 calcMethod={calcMethod}
                                 setCalcMethod={setCalcMethod}
@@ -719,7 +957,11 @@
                                                 <input 
                                                     type="number"
                                                     value={discount}
-                                                    onChange={(e) => setDiscount(Math.max(0, e.target.value))}
+                                                    onChange={(e) => {
+                                                        const next = parseFloat(e.target.value);
+                                                        const safe = Number.isFinite(next) ? next : 0;
+                                                        setDiscount(Math.min(100, Math.max(0, safe)));
+                                                    }}
                                                     className="iso-input"
                                                 />
                                             </div>
@@ -731,7 +973,11 @@
                                                     <input 
                                                         type="number"
                                                         value={years}
-                                                        onChange={(e) => setYears(Math.max(1, e.target.value))}
+                                                        onChange={(e) => {
+                                                            const next = parseInt(e.target.value, 10);
+                                                            const safe = Number.isFinite(next) ? next : 1;
+                                                            setYears(Math.max(1, safe));
+                                                        }}
                                                         className="iso-input"
                                                     />
                                                 </div>
@@ -811,13 +1057,15 @@
                                                                                 value={tier.limit}
                                                                                 onChange={(e) => {
                                                                                     const newStds = [...standards];
-                                                                                    newStds[sIdx].tiers[tIdx].limit = parseFloat(e.target.value);
-                                                                                    // Sync threshold for the next infinite tier if it exists
-                                                                                    if (newStds[sIdx].tiers[tIdx+1]?.limit === Infinity) {
-                                                                                        newStds[sIdx].tiers[tIdx+1].threshold = parseFloat(e.target.value);
-                                                                                    }
-                                                                                    setStandards(newStds);
-                                                                                }}
+                                                                                const next = parseFloat(e.target.value);
+                                                                                if (!Number.isFinite(next)) return;
+                                                                                newStds[sIdx].tiers[tIdx].limit = Math.max(0, next);
+                                                                                // Sync threshold for the next infinite tier if it exists
+                                                                                if (newStds[sIdx].tiers[tIdx+1]?.limit === Infinity) {
+                                                                                    newStds[sIdx].tiers[tIdx+1].threshold = Math.max(0, next);
+                                                                                }
+                                                                                setStandards(newStds);
+                                                                            }}
                                                                                 className="w-24 bg-transparent border-b border-blue-200 focus:border-blue-500 outline-none px-1"
                                                                             />
                                                                         </div>
@@ -830,7 +1078,9 @@
                                                                             value={tier.fee}
                                                                             onChange={(e) => {
                                                                                 const newStds = [...standards];
-                                                                                newStds[sIdx].tiers[tIdx].fee = parseFloat(e.target.value);
+                                                                                const next = parseFloat(e.target.value);
+                                                                                if (!Number.isFinite(next)) return;
+                                                                                newStds[sIdx].tiers[tIdx].fee = Math.max(0, next);
                                                                                 setStandards(newStds);
                                                                             }}
                                                                             className="w-24 bg-transparent border-b border-blue-200 focus:border-blue-500 outline-none px-1"
@@ -843,9 +1093,11 @@
                                                                                 value={tier.rate}
                                                                                 onChange={(e) => {
                                                                                     const newStds = [...standards];
-                                                                                    newStds[sIdx].tiers[tIdx].rate = parseFloat(e.target.value);
-                                                                                    setStandards(newStds);
-                                                                                }}
+                                                                                const next = parseFloat(e.target.value);
+                                                                                if (!Number.isFinite(next)) return;
+                                                                                newStds[sIdx].tiers[tIdx].rate = Math.max(0, next);
+                                                                                setStandards(newStds);
+                                                                            }}
                                                                                 className="w-16 bg-transparent border-b border-blue-200 focus:border-blue-500 outline-none px-1 text-blue-600 font-bold"
                                                                             />
                                                                             <span className="text-blue-600 font-bold">‰</span>
@@ -853,7 +1105,9 @@
                                                                     )}
                                                                 </td>
                                                                 <td className="py-4 text-gray-400 italic">
-                                                                    {tier.limit === Infinity ? `基数 ${tier.base} + 超额部分` : '固定收费'}
+                                                                    {tier.limit === Infinity 
+                                                                        ? `基数 ${getTierBase(std, tIdx)} + 超额部分（基数=前档固定额合计）` 
+                                                                        : '固定收费'}
                                                                 </td>
                                                             </tr>
                                                         ))}
