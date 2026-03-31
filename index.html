@@ -485,6 +485,9 @@
             });
             const [globalType, setGlobalType] = useState(standards[0].id);
             const [batchDiscount, setBatchDiscount] = useState(100);
+            
+            // Refs for auto-focusing next row on Enter
+            const amountRefs = useRef([]);
 
             // Trigger Calculation for all rows
             const handleBatchCalculate = () => {
@@ -594,6 +597,16 @@
                 // Reset fee on edit to indicate need for recalculation
                 newRows[index] = { ...newRows[index], [field]: nextValue, fee: null };
                 setRows(newRows);
+            };
+            
+            const handleKeyDown = (e, index) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const nextInput = amountRefs.current[index + 1];
+                    if (nextInput) {
+                        nextInput.focus();
+                    }
+                }
             };
             
             // ... (rest of row management logic: addRow, clearRows, handlePaste) ...
@@ -756,9 +769,11 @@
                                     </div>
                                     <div className="col-span-3">
                                         <input 
+                                            ref={(el) => amountRefs.current[idx] = el}
                                             type="text" 
                                             value={row.amount}
                                             onChange={(e) => updateRow(idx, 'amount', e.target.value)}
+                                            onKeyDown={(e) => handleKeyDown(e, idx)}
                                             onPaste={(e) => handlePaste(e, idx, 'amount')}
                                             placeholder="0.00"
                                             className="w-full bg-transparent border-b border-transparent focus:border-blue-300 outline-none px-2 py-1 font-mono"
