@@ -472,15 +472,14 @@
 
         // --- Batch Calculator Component ---
         const BatchCalc = ({ standards, unit, calcMethod, setCalcMethod }) => {
-            // Rows: { id, name, amount, typeId, fee }
+            // Rows: { id, name, amount, typeId }
             const [rows, setRows] = useState(() => {
                 // Initial 10 empty rows
                 return Array(10).fill(0).map((_, i) => ({
                     id: Date.now() + i,
                     name: '',
                     amount: '',
-                    typeId: standards[0].id,
-                    fee: null
+                    typeId: standards[0].id
                 }));
             });
             const [globalType, setGlobalType] = useState(standards[0].id);
@@ -489,9 +488,9 @@
             // Refs for auto-focusing next row on Enter
             const amountRefs = useRef([]);
 
-            // Trigger Calculation for all rows
-            const handleBatchCalculate = () => {
-                const updatedRows = rows.map(row => {
+            // Real-time calculation using useMemo
+            const rowsWithFees = useMemo(() => {
+                return rows.map(row => {
                     const std = standards.find(s => s.id === row.typeId);
                     if (!std || !row.amount) {
                         return { ...row, fee: 0 };
@@ -500,15 +499,14 @@
                     const finalFee = baseFee * (batchDiscount / 100);
                     return { ...row, fee: finalFee };
                 });
-                setRows(updatedRows);
-            };
+            }, [rows, standards, unit, calcMethod, batchDiscount]);
 
             const handleExport = async () => {
                 if (!window.XLSX) {
                     alert('导出模块加载失败，请检查网络连接后重试。');
                     return;
                 }
-                const exportRows = rows.filter(r => Number.isFinite(r.fee) && r.fee > 0);
+                const exportRows = rowsWithFees.filter(r => Number.isFinite(r.fee) && r.fee > 0);
                 if (exportRows.length === 0) {
                     alert('暂无可导出的有效数据（折后费用需大于0）。');
                     return;
@@ -594,8 +592,7 @@
                     }
                     nextValue = normalized;
                 }
-                // Reset fee on edit to indicate need for recalculation
-                newRows[index] = { ...newRows[index], [field]: nextValue, fee: null };
+                newRows[index] = { ...newRows[index], [field]: nextValue };
                 setRows(newRows);
             };
             
@@ -609,9 +606,8 @@
                 }
             };
             
-            // ... (rest of row management logic: addRow, clearRows, handlePaste) ...
             const addRow = () => {
-                setRows([...rows, { id: Date.now(), name: '', amount: '', typeId: globalType, fee: null }]);
+                setRows([...rows, { id: Date.now(), name: '', amount: '', typeId: globalType }]);
             };
             
             const clearRows = () => {
@@ -620,8 +616,7 @@
                         id: Date.now() + i,
                         name: '',
                         amount: '',
-                        typeId: globalType,
-                        fee: null
+                        typeId: globalType
                     })));
                 }
             };
@@ -641,7 +636,7 @@
                     
                     // Auto-expand rows if pasted data exceeds current length
                     if (currentRowIdx >= newRows.length) {
-                        newRows.push({ id: Date.now() + i, name: '', amount: '', typeId: globalType, fee: null });
+                        newRows.push({ id: Date.now() + i, name: '', amount: '', typeId: globalType });
                     }
                     
                     const cells = line.split('\t');
@@ -667,8 +662,6 @@
                             }
                         }
                     }
-                    // Reset fee for pasted rows
-                    newRows[currentRowIdx].fee = null;
                 });
                 
                 setRows(newRows);
@@ -677,11 +670,11 @@
             // Batch set type
             const applyGlobalType = (typeId) => {
                 setGlobalType(typeId);
-                const newRows = rows.map(r => ({ ...r, typeId, fee: null }));
+                const newRows = rows.map(r => ({ ...r, typeId }));
                 setRows(newRows);
             };
             
-            const totalFee = rows.reduce((acc, row) => acc + (row.fee || 0), 0);
+            const totalFee = rowsWithFees.reduce((acc, row) => acc + (row.fee || 0), 0);
 
             return (
                 <div className="space-y-6 animate-in slide-in-from-right duration-500">
@@ -710,12 +703,6 @@
                                     className="w-16 bg-transparent text-right font-bold text-blue-600 outline-none border-b border-blue-200 focus:border-blue-500"
                                 />
                             </div>
-                            <button 
-                                onClick={handleBatchCalculate} 
-                                className="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/30 flex items-center gap-2"
-                            >
-                                <Icon name="calculator" size={16} /> 开始计算
-                            </button>
                             <button 
                                 onClick={handleExport} 
                                 className="px-6 py-2 text-sm font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 flex items-center gap-2"
@@ -754,7 +741,7 @@
                         </div>
                         
                         <div className="max-h-[60vh] overflow-y-auto custom-scrollbar bg-white/30">
-                            {rows.map((row, idx) => (
+                            {rowsWithFees.map((row, idx) => (
                                 <div key={row.id} className="grid grid-cols-12 gap-4 p-2 border-b border-white/20 items-center hover:bg-white/50 transition-colors">
                                     <div className="col-span-1 text-center text-gray-400 text-xs">{idx + 1}</div>
                                     <div className="col-span-3">
@@ -789,7 +776,7 @@
                                         </select>
                                     </div>
                                     <div className="col-span-2 text-right pr-4 font-mono font-medium text-gray-800">
-                                        {row.fee !== null ? row.fee.toFixed(2) : <span className="text-gray-400 text-xs">待计算</span>}
+                                        {row.fee > 0 ? row.fee.toFixed(2) : <span className="text-gray-400 text-xs">0.00</span>}
                                     </div>
                                 </div>
                             ))}
