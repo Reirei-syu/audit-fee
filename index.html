@@ -471,22 +471,14 @@
         );
 
         // --- Batch Calculator Component ---
-        const BatchCalc = ({ standards, unit, calcMethod, setCalcMethod }) => {
-            // Rows: { id, name, amount, typeId }
-            const [rows, setRows] = useState(() => {
-                // Initial 10 empty rows
-                return Array(10).fill(0).map((_, i) => ({
-                    id: Date.now() + i,
-                    name: '',
-                    amount: '',
-                    typeId: standards[0].id
-                }));
-            });
+        const BatchCalc = ({ standards, unit, calcMethod, rows, setRows }) => {
             const [globalType, setGlobalType] = useState(standards[0].id);
             const [batchDiscount, setBatchDiscount] = useState(100);
             
             // Refs for auto-focusing next row on Enter
             const amountRefs = useRef([]);
+            
+            // ... (rest of the logic remains similar but uses props.rows)
 
             // Real-time calculation using useMemo
             const rowsWithFees = useMemo(() => {
@@ -683,11 +675,6 @@
                             <h1 className="text-2xl font-bold tracking-tight">批量计算</h1>
                         </div>
                         <div className="batch-controls flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end">
-                            <ToggleGroup 
-                                options={[{label: '超额累进', value: 'excess'}, {label: '全额累进', value: 'full'}]}
-                                value={calcMethod}
-                                onChange={setCalcMethod}
-                            />
                             <div className="iso-hover-outline flex items-center bg-white/50 rounded-lg px-3 py-2 border border-blue-100 shadow-sm">
                                 <span className="text-sm text-gray-600 font-medium mr-2">批量折扣(%):</span>
                                 <input 
@@ -807,13 +794,24 @@
         const App = () => {
             const [view, setView] = useState('calc'); // 'calc', 'settings', 'batch'
             const [unit, setUnit] = useState('yuan'); // 'wan', 'yuan'
-            const [calcMethod, setCalcMethod] = useState('full'); // 'excess', 'full'
+            const [calcMethod] = useState('excess'); // Hardcoded to excess, logic interface remains
             const [standards, setStandards] = useState(() => {
                 const loaded = loadStandardsFromStorage();
                 return loaded || DEFAULT_STANDARDS;
             });
+
+            // Persist batch data across view switches
+            const [batchRows, setBatchRows] = useState(() => {
+                return Array(10).fill(0).map((_, i) => ({
+                    id: Date.now() + i,
+                    name: '',
+                    amount: '',
+                    typeId: DEFAULT_STANDARDS[0].id
+                }));
+            });
             
             const [asset, setAsset] = useState('');
+            // ... (rest of App state)
             const [selectedType, setSelectedType] = useState(standards[0].id);
             const [discount, setDiscount] = useState(100);
             const [years, setYears] = useState(1);
@@ -912,7 +910,8 @@
                                 standards={standards} 
                                 unit={unit} 
                                 calcMethod={calcMethod}
-                                setCalcMethod={setCalcMethod}
+                                rows={batchRows}
+                                setRows={setBatchRows}
                             />
                         ) : view === 'calc' ? (
                             <div className="space-y-10 animate-in fade-in duration-500">
@@ -922,11 +921,6 @@
                                         <p className="text-gray-500 mt-2 text-lg">单项计算</p>
                                     </div>
                                     <div className="flex gap-4">
-                                        <ToggleGroup 
-                                            options={[{label: '超额累进', value: 'excess'}, {label: '全额累进', value: 'full'}]}
-                                            value={calcMethod}
-                                            onChange={setCalcMethod}
-                                        />
                                         <ToggleGroup 
                                             options={[{label: '万元', value: 'wan'}, {label: '元', value: 'yuan'}]}
                                             value={unit}
