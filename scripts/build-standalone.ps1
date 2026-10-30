@@ -14,6 +14,14 @@ if (-not (Test-Path $sourcePath)) {
 
 $html = Get-Content -Path $sourcePath -Raw -Encoding UTF8
 
+foreach ($iconFile in @('favicon.ico', 'favicon.svg')) {
+    $iconPath = Join-Path $repoRoot $iconFile
+    $iconMime = if ($iconFile.EndsWith('.svg')) { 'image/svg+xml' } else { 'image/x-icon' }
+    $iconBase64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($iconPath))
+    $iconPattern = '(?<=href=")\./' + [regex]::Escape($iconFile) + '(?:\?[^"]*)?(?=")'
+    $html = [regex]::Replace($html, $iconPattern, "data:${iconMime};base64,$iconBase64")
+}
+
 $vendorFiles = @(
     "tailwind-browser.js",
     "lucide.min.js",
