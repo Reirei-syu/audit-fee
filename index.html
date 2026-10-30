@@ -24,15 +24,17 @@
 
     <style>
         body {
-            font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            background: radial-gradient(ellipse at 16% 12%,#c9d7ffb3,transparent 46%),radial-gradient(ellipse at 48% 36%,#e4cfff80,transparent 48%),radial-gradient(ellipse at 82% 8%,#c9eee88c,transparent 42%),linear-gradient(145deg,#f5f7fc,#eaf0f8);
+            margin: 0;
+            background-attachment: fixed;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 20px;
-            color: #1d1d1f;
+            color: #25314b;
         }
 
         .tool-navigation {
@@ -57,12 +59,12 @@
         .tool-navigation a:focus-visible { outline: 2px solid #687bd1; outline-offset: 3px; }
 
         .glass-container {
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+            background: linear-gradient(135deg,#ffffff9c,#ffffff3d);
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+            border-radius: 26px;
+            border: 1px solid #ffffffbd;
+            box-shadow: inset 0 1px 0 #ffffffe6,inset 0 -1px 0 #ffffff4d,0 8px 32px #52678e12,0 2px 6px #52678e08;
             width: min(95vw, 1200px);
             max-width: 1200px;
             overflow: hidden;
@@ -72,7 +74,7 @@
         .iso-card {
             background: rgba(255, 255, 255, 0.5);
             border: 1px solid rgba(255, 255, 255, 0.8);
-            border-radius: 18px;
+            border-radius: 26px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
             position: relative;
             z-index: 0;
@@ -81,7 +83,7 @@
 
         .iso-card:hover {
             z-index: 5;
-            box-shadow: 0 12px 22px -10px rgba(0, 0, 0, 0.12), 0 0 12px 2px rgba(30, 214, 255, 0.35);
+            box-shadow: 0 12px 22px -10px rgba(0, 0, 0, 0.12), 0 0 12px 2px rgba(104,123,209,.18);
         }
 
         .iso-hover-outline {
@@ -89,7 +91,7 @@
         }
 
         .iso-hover-outline:hover {
-            box-shadow: 0 0 10px 2px rgba(30, 214, 255, 0.35);
+            box-shadow: 0 0 10px 2px rgba(104,123,209,.18);
         }
 
         .glass-container button {
@@ -97,7 +99,7 @@
         }
 
         .glass-container button:hover {
-            filter: drop-shadow(0 0 6px rgba(30, 214, 255, 0.45));
+            filter: drop-shadow(0 0 6px rgba(104,123,209,.20));
         }
 
         .nav-glow {
@@ -105,7 +107,7 @@
         }
 
         .nav-glow:hover {
-            box-shadow: 0 0 10px 2px rgba(30, 214, 255, 0.45);
+            box-shadow: 0 0 10px 2px rgba(104,123,209,.20);
         }
 
         .tooltip-layer {
@@ -124,28 +126,28 @@
         }
 
         .iso-input:focus {
-            border-color: #007aff;
-            ring: 2px solid rgba(0, 122, 255, 0.1);
+            border-color: #596cc4;
+            box-shadow: 0 0 0 3px rgba(89,108,196,.15);
         }
 
         .iso-button {
-            background: #007aff;
+            background: #596cc4;
             color: white;
             padding: 12px 24px;
             border-radius: 12px;
             font-weight: 600;
             transition: all 0.2s ease;
-            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+            box-shadow: 0 4px 12px rgba(89, 108, 196, 0.3);
         }
 
         .iso-button:hover {
-            background: #0062cc;
-            box-shadow: 0 6px 16px rgba(0, 122, 255, 0.4);
+            background: #4e5da4;
+            box-shadow: 0 6px 16px rgba(89, 108, 196, 0.4);
         }
 
         .iso-button-secondary {
-            background: rgba(0, 122, 255, 0.1);
-            color: #007aff;
+            background: rgba(89, 108, 196, 0.1);
+            color: #596cc4;
             padding: 12px 24px;
             border-radius: 12px;
             font-weight: 600;
@@ -153,7 +155,7 @@
         }
 
         .iso-button-secondary:hover {
-            background: rgba(0, 122, 255, 0.2);
+            background: rgba(89, 108, 196, 0.2);
         }
 
         /* Custom Scrollbar */
@@ -174,7 +176,7 @@
         .result-value {
             font-size: 2.5rem;
             font-weight: 700;
-            background: linear-gradient(to right, #007aff, #5856d6);
+            background: linear-gradient(to right, #596cc4, #5856d6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -200,6 +202,9 @@
             background: #f5f7fa; color: #666; font-size: 1.2rem;
             z-index: 1000;
         }
+        .text-blue-600{color:#596cc4}.bg-blue-600{background-color:#596cc4}
+        button:focus-visible,a:focus-visible{outline:3px solid #687bd1;outline-offset:3px}
+        @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
     </style>
 </head>
 <body>
