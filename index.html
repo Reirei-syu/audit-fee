@@ -28,11 +28,33 @@
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 20px;
             color: #1d1d1f;
         }
+
+        .tool-navigation {
+            width: min(95vw, 1200px);
+            margin-bottom: 16px;
+        }
+        .tool-navigation a {
+            display: inline-block;
+            padding: 8px 14px;
+            border: 1px solid #ffffffbd;
+            border-radius: 12px;
+            background: #ffffff70;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow: inset 0 1px 0 #fff, 0 3px 12px #52678e0a;
+            color: #5366b9;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .tool-navigation a:hover { background: #ffffffb3; }
+        .tool-navigation a:focus-visible { outline: 2px solid #687bd1; outline-offset: 3px; }
 
         .glass-container {
             background: rgba(255, 255, 255, 0.7);
@@ -181,6 +203,7 @@
     </style>
 </head>
 <body>
+    <nav class="tool-navigation" aria-label="站点导航"><a href="/">← 返回导航页</a></nav>
     <!-- Loading Indicator (Removes automatically when React mounts) -->
     <div id="loading-state">正在加载资源，请稍候...</div>
     
