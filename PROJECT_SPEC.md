@@ -14,6 +14,8 @@
 
 ## 架构约束
 
+- 源码统一位于 `D:\coding\domain\tools\audit-fee`，保留独立 Git 仓库；站点首页及统一构建位于 `D:\coding\domain`。
+- 站点构建入口为根目录 `node build.mjs`，将本工具静态文件汇总到 `dist/audit-fee/`。
 - UI / 页面交互保留在 `index.html`。
 - 打包逻辑独立为脚本，不与业务计算逻辑耦合。
 - 成品输出目录固定为 `D:\coding\completed\audit-fee`。
